@@ -201,6 +201,7 @@ public class SessionOutputBufferImpl implements SessionOutputBuffer {
                     this.buffer.append(charbuffer, off, chunk);
                 }
                 if (this.buffer.isFull()) {
+                    // 将buffer中的数据写到outputStream中
                     flushBuffer(outputStream);
                 }
                 off += chunk;
@@ -210,6 +211,8 @@ public class SessionOutputBufferImpl implements SessionOutputBuffer {
             final CharBuffer cbuf = CharBuffer.wrap(charbuffer.array(), 0, charbuffer.length());
             writeEncoded(cbuf, outputStream);
         }
+
+        // 回车换行
         write(CRLF, outputStream);
     }
 

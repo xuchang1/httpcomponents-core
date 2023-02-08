@@ -75,6 +75,8 @@ public class LaxConnPool<T, C extends ModalCloseable> implements ManagedConnPool
     private final PoolReusePolicy policy;
     private final DisposalCallback<C> disposalCallback;
     private final ConnPoolListener<T> connPoolListener;
+
+    // 只实现了 PerRoutePool 级别连接池的控制
     private final ConcurrentMap<T, PerRoutePool<T, C>> routeToPool;
     private final AtomicBoolean isShutDown;
 
@@ -161,6 +163,7 @@ public class LaxConnPool<T, C extends ModalCloseable> implements ManagedConnPool
             final FutureCallback<PoolEntry<T, C>> callback) {
         Args.notNull(route, "Route");
         Asserts.check(!isShutDown.get(), "Connection pool shut down");
+        // 基于 ConcurrentHashMap 获取一个 PerRoutePool 对象
         final PerRoutePool<T, C> routePool = getPool(route);
         return routePool.lease(state, requestTimeout, callback);
     }
@@ -408,6 +411,7 @@ public class LaxConnPool<T, C extends ModalCloseable> implements ManagedConnPool
         private PoolEntry<T, C> createPoolEntry() {
             final int poolMax = max;
             int prev, next;
+            // 通过 cas 的方式控制分配的连接数量
             do {
                 prev = allocated.get();
                 next = (prev<poolMax)? prev+1 : prev;

@@ -80,7 +80,9 @@ public class DefaultHttpResponseParser<T extends HttpResponse> extends AbstractM
 
     @Override
     protected T createMessage(final CharArrayBuffer buffer) throws HttpException {
+        // 解析状态行信息，包含协议版本、响应码、响应码reason信息
         final StatusLine statusLine = getLineParser().parseStatusLine(buffer);
+        // new 一个 http response对象，此时只有基本的状态码信息
         final T response = this.responseFactory.newHttpResponse(statusLine.getStatusCode(), statusLine.getReasonPhrase());
         response.setVersion(statusLine.getProtocolVersion());
         return response;

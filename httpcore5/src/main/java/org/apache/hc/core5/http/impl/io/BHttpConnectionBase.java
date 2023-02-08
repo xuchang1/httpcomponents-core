@@ -69,6 +69,7 @@ class BHttpConnectionBase implements BHttpConnection {
 
     private static final Timeout STALE_CHECK_TIMEOUT = Timeout.ofMilliseconds(1);
     final Http1Config http1Config;
+    // 连接对象里面，包含一个输入、输出的 buffer 封装
     final SessionInputBufferImpl inBuffer;
     final SessionOutputBufferImpl outbuffer;
     final BasicHttpConnectionMetrics connMetrics;
@@ -302,6 +303,9 @@ class BHttpConnectionBase implements BHttpConnection {
         }
     }
 
+    /**
+     * 将buffer中的数据写到输出流中并flush
+     */
     @Override
     public void flush() throws IOException {
         final SocketHolder socketHolder = ensureOpen();

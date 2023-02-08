@@ -38,6 +38,7 @@ import org.apache.hc.core5.util.Args;
  */
 public class NamedElementChain<E> {
 
+    // master node next 维护 addLast node，previous维护 addFirst node
     private final Node master;
     private int size;
 

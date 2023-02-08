@@ -178,6 +178,7 @@ public class BasicLineParser implements LineParser {
 
         final ParserCursor cursor = new ParserCursor(0, buffer.length());
         this.tokenizer.skipWhiteSpace(buffer, cursor);
+        // 1. 协议版本信息
         final ProtocolVersion ver = parseProtocolVersion(buffer, cursor);
         this.tokenizer.skipWhiteSpace(buffer, cursor);
         final String s = this.tokenizer.parseToken(buffer, cursor, BLANKS);
@@ -189,11 +190,13 @@ public class BasicLineParser implements LineParser {
         }
         final int statusCode;
         try {
+            // 响应码信息
             statusCode = Integer.parseInt(s);
         } catch (final NumberFormatException e) {
             throw new ParseException("Status line contains invalid status code",
                     buffer, cursor.getLowerBound(), cursor.getUpperBound(), cursor.getPos());
         }
+        // 解析的reason信息
         final String text = buffer.substringTrimmed(cursor.getPos(), cursor.getUpperBound());
         return new StatusLine(ver, statusCode, text);
     }

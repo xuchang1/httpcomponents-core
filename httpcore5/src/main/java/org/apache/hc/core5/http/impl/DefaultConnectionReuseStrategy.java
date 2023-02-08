@@ -81,6 +81,7 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
         Args.notNull(response, "HTTP response");
 
         if (request != null) {
+            // Connection header对应的value，如果为close，则不设置keepAlive
             final Iterator<String> ti = new BasicTokenIterator(request.headerIterator(HttpHeaders.CONNECTION));
             while (ti.hasNext()) {
                 final String token = ti.next();
@@ -93,11 +94,13 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
         // If a HTTP 204 No Content response contains a Content-length with value > 0 or Transfer-Encoding header,
         // don't reuse the connection. This is to avoid getting out-of-sync if a misbehaved HTTP server
         // returns content as part of a HTTP 204 response.
+        // 204响应码处理
         if (response.getCode() == HttpStatus.SC_NO_CONTENT) {
             final Header clh = response.getFirstHeader(HttpHeaders.CONTENT_LENGTH);
             if (clh != null) {
                 try {
                     final long contentLen = Long.parseLong(clh.getValue());
+                    // 包含content不保活
                     if (contentLen > 0) {
                         return false;
                     }
@@ -128,6 +131,8 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
         // Check for the "Connection" header. If that is absent, check for
         // the "Proxy-Connection" header. The latter is an unspecified and
         // broken but unfortunately common extension of HTTP.
+
+        // 检查 Connection header or Proxy-Connection header
         Iterator<Header> headerIterator = response.headerIterator(HttpHeaders.CONNECTION);
         if (!headerIterator.hasNext()) {
             headerIterator = response.headerIterator("Proxy-Connection");
@@ -135,6 +140,7 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
 
         final ProtocolVersion ver = response.getVersion() != null ? response.getVersion() : context.getProtocolVersion();
         if (headerIterator.hasNext()) {
+            // http 1.1 版本默认开启，对应header value设置为close才关闭
             if (ver.greaterEquals(HttpVersion.HTTP_1_1)) {
                 final Iterator<String> it = new BasicTokenIterator(headerIterator);
                 while (it.hasNext()) {
@@ -145,6 +151,8 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
                 }
                 return true;
             }
+
+            // 其他版本默认关闭，对应header value设置为keep-alive才开启
             final Iterator<String> it = new BasicTokenIterator(headerIterator);
             while (it.hasNext()) {
                 final String token = it.next();
@@ -154,6 +162,8 @@ public class DefaultConnectionReuseStrategy implements ConnectionReuseStrategy {
             }
             return false;
         }
+
+        // Connection header or Proxy-Connection header 未设置，1.1版本默认开启
         return ver.greaterEquals(HttpVersion.HTTP_1_1);
     }
 

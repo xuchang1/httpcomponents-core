@@ -181,8 +181,11 @@ public class DefaultBHttpClientConnection extends BHttpConnectionBase
     public void sendRequestHeader(final ClassicHttpRequest request)
             throws HttpException, IOException {
         Args.notNull(request, "HTTP request");
+        // check 并获取已经创建连接的socket
         final SocketHolder socketHolder = ensureOpen();
+        // 写数据实现，将method、url、version、headers等信息写到输出流中
         this.requestWriter.write(request, this.outbuffer, socketHolder.getOutputStream());
+        // 空实现
         onRequestSubmitted(request);
         incrementRequestCount();
     }
@@ -195,6 +198,8 @@ public class DefaultBHttpClientConnection extends BHttpConnectionBase
         if (entity == null) {
             return;
         }
+
+        // content length
         final long len = this.outgoingContentStrategy.determineLength(request);
         if (len == ContentLengthStrategy.UNDEFINED) {
             throw new LengthRequiredException();
@@ -296,6 +301,7 @@ public class DefaultBHttpClientConnection extends BHttpConnectionBase
     @Override
     public ClassicHttpResponse receiveResponseHeader() throws HttpException, IOException {
         final SocketHolder socketHolder = ensureOpen();
+        // 解析了协议版本号、状态码、header等信息
         final ClassicHttpResponse response = this.responseParser.parse(this.inBuffer, socketHolder.getInputStream());
         if (response == null) {
             throw new NoHttpResponseException("The target server failed to respond");
@@ -321,6 +327,7 @@ public class DefaultBHttpClientConnection extends BHttpConnectionBase
         Args.notNull(response, "HTTP response");
         final SocketHolder socketHolder = ensureOpen();
         final long len = this.incomingContentStrategy.determineLength(response);
+        // 创建一个 IncomingEntity，对输入流做了一定封装。并没有触发真正的读操作
         response.setEntity(createIncomingEntity(response, this.inBuffer, socketHolder.getInputStream(), len));
     }
 }

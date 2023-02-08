@@ -63,6 +63,7 @@ public class DefaultHttpRequestWriter extends AbstractMessageWriter<ClassicHttpR
     protected void writeHeadLine(
             final ClassicHttpRequest message, final CharArrayBuffer lineBuf) throws IOException {
         final ProtocolVersion transportVersion = message.getVersion();
+        // 写入method、url、version信息，以空格分开
         getLineFormatter().formatRequestLine(lineBuf, new RequestLine(
                 message.getMethod(),
                 message.getRequestUri(),

@@ -37,6 +37,7 @@ import org.apache.hc.core5.util.Timeout;
  *
  * @since 5.0
  */
+// 阻塞的http请求
 public interface BHttpConnection extends HttpConnection {
 
     /**

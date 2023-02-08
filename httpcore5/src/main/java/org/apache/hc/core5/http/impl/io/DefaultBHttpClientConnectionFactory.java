@@ -114,6 +114,7 @@ public class DefaultBHttpClientConnectionFactory
 
     @Override
     public DefaultBHttpClientConnection createConnection(final Socket socket) throws IOException {
+        // 创建一个http连接对象
         final DefaultBHttpClientConnection conn = new DefaultBHttpClientConnection(
                 this.http1Config,
                 CharCodingSupport.createDecoder(this.charCodingConfig),
@@ -123,6 +124,7 @@ public class DefaultBHttpClientConnectionFactory
                 this.responseOutOfOrderStrategy,
                 this.requestWriterFactory,
                 this.responseParserFactory);
+        // 缓存创建的socket对象
         conn.bind(socket);
         return conn;
     }

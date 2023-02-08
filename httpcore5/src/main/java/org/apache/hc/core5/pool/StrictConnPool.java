@@ -72,10 +72,13 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
     private final PoolReusePolicy policy;
     private final DisposalCallback<C> disposalCallback;
     private final ConnPoolListener<T> connPoolListener;
+
+    // HashMap维护是因为外层有加锁了
     private final Map<T, PerRoutePool<T, C>> routeToPool;
     private final LinkedList<LeaseRequest<T, C>> pendingRequests;
     private final Set<PoolEntry<T, C>> leased;
     private final LinkedList<PoolEntry<T, C>> available;
+
     private final ConcurrentLinkedQueue<LeaseRequest<T, C>> completedRequests;
     private final Map<T, Integer> maxPerRoute;
     private final Lock lock;
@@ -192,6 +195,7 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         final boolean acquiredLock;
 
         try {
+            // 加锁，粒度很大
             acquiredLock = this.lock.tryLock(requestTimeout.getDuration(), requestTimeout.getTimeUnit());
         } catch (final InterruptedException interruptedException) {
             Thread.currentThread().interrupt();
@@ -202,18 +206,29 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         if (acquiredLock) {
             try {
                 final LeaseRequest<T, C> request = new LeaseRequest<>(route, state, requestTimeout, future);
+
+                // future get有两种逻辑
+                // 1. 此处直接分配完成了，fireCallbacks方法会将分配的PoolEntry直接设置到future中
+                // 2. 此处请求阻塞了，被加到了pendingRequests中，此时future get会阻塞，直到其他连接释放回调pendingRequests中数据处理set result或超时返回。
+
+                // 从池子中为request获取一个PoolEntry并维护到request中
                 final boolean completed = processPendingRequest(request);
+                // 如果未取到，将当前请求维护到 pending 队列中
                 if (!request.isDone() && !completed) {
                     this.pendingRequests.add(request);
                 }
+                // 完成将请求维护到 completed 队列中
                 if (request.isDone()) {
                     this.completedRequests.add(request);
                 }
             } finally {
                 this.lock.unlock();
             }
+            // 遍历completedRequests集合，将request中的信息维护到对应future中
+            // 注意此处锁释放了，所以 completedRequests 是线程安全的队列
             fireCallbacks();
         } else {
+            // 超时未拿到锁，抛出一次
             future.failed(DeadlineTimeoutException.from(deadline));
         }
 
@@ -235,6 +250,8 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         if (!reusable) {
             entry.discardConnection(CloseMode.GRACEFUL);
         }
+
+        // 加锁维护队列信息
         this.lock.lock();
         try {
             if (this.leased.remove(entry)) {
@@ -242,11 +259,13 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
                     this.connPoolListener.onRelease(entry.getRoute(), this);
                 }
                 final PerRoutePool<T, C> pool = getPool(entry.getRoute());
+                // 维护了http连接且复用
                 final boolean keepAlive = entry.hasConnection() && reusable;
                 pool.free(entry, keepAlive);
                 if (keepAlive) {
                     switch (policy) {
                         case LIFO:
+                            // 默认这个实现，取、还都从头部进行
                             this.available.addFirst(entry);
                             break;
                         case FIFO:
@@ -256,8 +275,11 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
                             throw new IllegalStateException("Unexpected ConnPoolPolicy value: " + policy);
                     }
                 } else {
+                    // TODO 不复用，废弃连接。是否执行了两次？
                     entry.discardConnection(CloseMode.GRACEFUL);
                 }
+
+                // 释放连接的时候，会将pendingRequests队列中的请求，取一个进行处理
                 processNextPendingRequest();
             } else {
                 throw new IllegalStateException("Pool entry is not present in the set of leased entries");
@@ -296,6 +318,7 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
                 it.remove();
                 continue;
             }
+            // 只会取一个阻塞的请求进行处理
             final boolean completed = processPendingRequest(request);
             if (request.isDone() || completed) {
                 it.remove();
@@ -309,34 +332,46 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         }
     }
 
+    // 为当前请求，从池子中获取一个 PoolEntry
     private boolean processPendingRequest(final LeaseRequest<T, C> request) {
         final T route = request.getRoute();
         final Object state = request.getState();
         final Deadline deadline = request.getDeadline();
 
+        // 超时设置异常
         if (deadline.isExpired()) {
             request.failed(DeadlineTimeoutException.from(deadline));
             return false;
         }
 
+        // 获取每个route对应的pool，此时就是基于访问的地址进行了分池处理
         final PerRoutePool<T, C> pool = getPool(route);
+        // 从routePool中获取 PoolEntry
         PoolEntry<T, C> entry;
         for (;;) {
+            // 从 available 池子中获取一个可用 entry
             entry = pool.getFree(state);
             if (entry == null) {
                 break;
             }
+            // 判断拿到的 entry 是否过期了
             if (entry.getExpiryDeadline().isExpired()) {
                 entry.discardConnection(CloseMode.GRACEFUL);
+                // 大的 available 集合中移除
                 this.available.remove(entry);
+                // 归还连接并进入下一轮循环，再取一次
+                // 这个地方的free逻辑会触发socket的close方法，不会阻塞整个流程吗？
                 pool.free(entry, false);
             } else {
                 break;
             }
         }
+
         if (entry != null) {
+            // 拿到 entry 后，大的 pool 中处理
             this.available.remove(entry);
             this.leased.add(entry);
+            // 完成获取 entry 的操作，并设置到request 的result中
             request.completed(entry);
             if (this.connPoolListener != null) {
                 this.connPoolListener.onLease(entry.getRoute(), this);
@@ -345,8 +380,10 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         }
 
         // New connection is needed
+        // 每个route最大连接数
         final int maxPerRoute = getMax(route);
         // Shrink the pool prior to allocating a new connection
+        // 判断是否超过了，超过关闭连接
         final int excess = Math.max(0, pool.getAllocatedCount() + 1 - maxPerRoute);
         if (excess > 0) {
             for (int i = 0; i < excess; i++) {
@@ -361,11 +398,13 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
         }
 
         if (pool.getAllocatedCount() < maxPerRoute) {
+            // 大的pool最大可用连接数
             final int freeCapacity = Math.max(this.maxTotal - this.leased.size(), 0);
             if (freeCapacity == 0) {
                 return false;
             }
             final int totalAvailable = this.available.size();
+            // 维护的可用连接超过最大值了，将其他子pool中的连接释放一个，用来创建当前pool的连接
             if (totalAvailable > freeCapacity - 1) {
                 final PoolEntry<T, C> lastUsed = this.available.removeLast();
                 lastUsed.discardConnection(CloseMode.GRACEFUL);
@@ -373,6 +412,7 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
                 otherpool.remove(lastUsed);
             }
 
+            // 创建一个 entry
             entry = pool.createEntry(this.timeToLive);
             this.leased.add(entry);
             request.completed(entry);
@@ -387,6 +427,7 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
     private void fireCallbacks() {
         LeaseRequest<T, C> request;
         while ((request = this.completedRequests.poll()) != null) {
+            // 将request中维护的异常或result维护到future中
             final BasicFuture<PoolEntry<T, C>> future = request.getFuture();
             final Exception ex = request.getException();
             final PoolEntry<T, C> result = request.getResult();
@@ -400,6 +441,8 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
             } else {
                 future.cancel();
             }
+
+            // 如果未成功完成，进行release
             if (!successfullyCompleted) {
                 release(result, true);
             }
@@ -769,12 +812,14 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
             return this.available.size() + this.leased.size();
         }
 
+        // 根据state从available集合中获取一个PoolEntry
         public PoolEntry<T, C> getFree(final Object state) {
             if (!this.available.isEmpty()) {
                 if (state != null) {
                     final Iterator<PoolEntry<T, C>> it = this.available.iterator();
                     while (it.hasNext()) {
                         final PoolEntry<T, C> entry = it.next();
+                        // 判断state是否相等
                         if (state.equals(entry.getState())) {
                             it.remove();
                             this.leased.add(entry);
@@ -785,6 +830,7 @@ public class StrictConnPool<T, C extends ModalCloseable> implements ManagedConnP
                 final Iterator<PoolEntry<T, C>> it = this.available.iterator();
                 while (it.hasNext()) {
                     final PoolEntry<T, C> entry = it.next();
+                    // 获取一个为null的state
                     if (entry.getState() == null) {
                         it.remove();
                         this.leased.add(entry);

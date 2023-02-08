@@ -38,6 +38,8 @@ import org.apache.hc.core5.http.ProtocolVersion;
 import org.apache.hc.core5.util.Args;
 
 /**
+ * 缓存一个HttpContext，提供一些通用的方法
+ *
  * Implementation of {@link HttpContext} that provides convenience
  * setters for user assignable attributes and getter for readable attributes.
  *

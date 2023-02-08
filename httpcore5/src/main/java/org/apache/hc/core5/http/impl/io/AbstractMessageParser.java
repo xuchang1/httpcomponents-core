@@ -157,6 +157,7 @@ public abstract class AbstractMessageParser<T extends HttpMessage> implements Ht
 
         CharArrayBuffer current = null;
         CharArrayBuffer previous = null;
+        // 循环从 inputStream 中读取一行行数据封装到 CharArrayBuffer 中，最终添加到 headerLines 中
         for (;;) {
             if (current == null) {
                 current = new CharArrayBuffer(64);
@@ -189,6 +190,7 @@ public abstract class AbstractMessageParser<T extends HttpMessage> implements Ht
                 previous.append(' ');
                 previous.append(current, i, current.length() - i);
             } else {
+                // 解析出的行数据添加到list中
                 headerLines.add(current);
                 previous = current;
                 current = null;
@@ -198,6 +200,7 @@ public abstract class AbstractMessageParser<T extends HttpMessage> implements Ht
             }
         }
         final Header[] headers = new Header[headerLines.size()];
+        // 将 CharArrayBuffer 数据解析为 header 对象
         for (int i = 0; i < headerLines.size(); i++) {
             final CharArrayBuffer buffer = headerLines.get(i);
             headers[i] = parser.parseHeader(buffer);
@@ -242,6 +245,7 @@ public abstract class AbstractMessageParser<T extends HttpMessage> implements Ht
         final int st = this.state;
         switch (st) {
         case HEAD_LINE:
+            // 先解析头行的信息，会解析出 协议版本号、状态码等信息并创建 response
             for (int n = 0; n < this.http1Config.getMaxEmptyLineCount(); n++) {
                 this.headLine.clear();
                 final int i = buffer.readLine(this.headLine, inputStream);
@@ -261,6 +265,7 @@ public abstract class AbstractMessageParser<T extends HttpMessage> implements Ht
             this.state = HEADERS;
             //$FALL-THROUGH$
         case HEADERS:
+            // 解析响应header信息
             final Header[] headers = AbstractMessageParser.parseHeaders(
                     buffer,
                     inputStream,

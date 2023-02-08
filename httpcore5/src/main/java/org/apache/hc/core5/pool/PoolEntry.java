@@ -56,7 +56,10 @@ public final class PoolEntry<T, C extends ModalCloseable> {
     private final Supplier<Long> currentTimeSupplier;
 
     private volatile Object state;
+
+    // 分配一个http连接时会维护该值
     private volatile long created;
+    // 分配一个http连接或更新过期时间时维护
     private volatile long updated;
     private volatile Deadline expiryDeadline = Deadline.MIN_VALUE;
     private volatile Deadline validityDeadline = Deadline.MIN_VALUE;
@@ -166,6 +169,7 @@ public final class PoolEntry<T, C extends ModalCloseable> {
     /**
      * @since 5.0
      */
+    // PoolEntry中维护的http连接close，并将相关的指标重置。（此时PoolEntry对象本身可能还会继续被使用）
     public void discardConnection(final CloseMode closeMode) {
         final C connection = this.connRef.getAndSet(null);
         if (connection != null) {

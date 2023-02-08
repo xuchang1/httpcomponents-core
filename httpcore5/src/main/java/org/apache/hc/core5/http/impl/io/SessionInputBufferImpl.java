@@ -90,6 +90,7 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
         Args.notNull(metrics, "HTTP transport metrics");
         Args.positive(bufferSize, "Buffer size");
         this.metrics = metrics;
+        // buffer 缓冲区
         this.buffer = new byte[bufferSize];
         this.bufferPos = 0;
         this.bufferLen = 0;
@@ -132,6 +133,9 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
         return capacity() - length();
     }
 
+    /**
+     * 将 inputStream 中的数据读到 buffer 中
+     */
     public int fillBuffer(final InputStream inputStream) throws IOException {
         Args.notNull(inputStream, "Input stream");
         // compact the buffer if necessary
@@ -236,6 +240,7 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
      *             the stream has been reached.
      * @throws  IOException  if an I/O error occurs.
      */
+    // inputStream -> buffer -> lineBuffer -> charBuffer
     @Override
     public int readLine(final CharArrayBuffer charBuffer, final InputStream inputStream) throws IOException {
         Args.notNull(charBuffer, "Char array buffer");
@@ -243,6 +248,8 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
         int readLen = 0;
         boolean retry = true;
         while (retry) {
+
+            // 如果 buffer 中包含数据，参数读取行结尾标识
             // attempt to find end of line (LF)
             int pos = -1;
             for (int i = this.bufferPos; i < this.bufferLen; i++) {
@@ -252,6 +259,7 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
                 }
             }
 
+            // 是否超过最大长度判断
             if (this.maxLineLen > 0) {
                 final int currentLen = this.lineBuffer.length()
                         + (pos >= 0 ? pos : this.bufferLen) - this.bufferPos;
@@ -274,6 +282,7 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
                 // end of line not found
                 if (hasBufferedData()) {
                     final int len = this.bufferLen - this.bufferPos;
+                    // 将 buffer 中的数据读一行到 lineBuffer 中
                     this.lineBuffer.append(this.buffer, this.bufferPos, len);
                     this.bufferPos = this.bufferLen;
                 }
@@ -303,6 +312,7 @@ public class SessionInputBufferImpl implements SessionInputBuffer {
      * @return HTTP line as a string
      * @throws  IOException  if an I/O error occurs.
      */
+    // 将 lineBuffer 中的数据写到 CharArrayBuffer 中
     private int lineFromLineBuffer(final CharArrayBuffer charBuffer)
             throws IOException {
         // discard LF if found

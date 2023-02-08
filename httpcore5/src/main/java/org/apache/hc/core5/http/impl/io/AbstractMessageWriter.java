@@ -86,8 +86,12 @@ public abstract class AbstractMessageWriter<T extends HttpMessage> implements Ht
         Args.notNull(message, "HTTP message");
         Args.notNull(buffer, "Session output buffer");
         Args.notNull(outputStream, "Output stream");
+        // 将url、method、version等相关信息写到 lineBuf 中
         writeHeadLine(message, this.lineBuf);
+        // 将 lineBuf 中的数据，写到 SessionOutputBuffer 的 byteArray 中，然后flush到 outputStream 中
         buffer.writeLine(this.lineBuf, outputStream);
+
+        // 同样方式处理header信息
         for (final Iterator<Header> it = message.headerIterator(); it.hasNext(); ) {
             final Header header = it.next();
             if (header instanceof FormattedHeader) {
@@ -100,6 +104,7 @@ public abstract class AbstractMessageWriter<T extends HttpMessage> implements Ht
             }
         }
         this.lineBuf.clear();
+        // lineBuf 被清空了，会写入回车换行的结束标识
         buffer.writeLine(this.lineBuf, outputStream);
     }
 

@@ -39,6 +39,7 @@ import org.apache.hc.core5.util.TimeValue;
  *   connection.
  * @since 4.2
  */
+// 连接池运行时的一些控制，例如一些参数配置，关闭空闲连接等
 public interface ConnPoolControl<T> extends ConnPoolStats<T> {
 
     void setMaxTotal(int max);

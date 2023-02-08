@@ -128,6 +128,7 @@ public class HttpRequestExecutor {
             context.setAttribute(HttpCoreContext.SSL_SESSION, conn.getSSLSession());
             context.setAttribute(HttpCoreContext.CONNECTION_ENDPOINT, conn.getEndpointDetails());
 
+            // 将method、url、version、headers等信息写到输出流中
             conn.sendRequestHeader(request);
             if (streamListener != null) {
                 streamListener.onRequestHead(conn, request);
@@ -138,9 +139,12 @@ public class HttpRequestExecutor {
                 final Header expect = request.getFirstHeader(HttpHeaders.EXPECT);
                 expectContinue = expect != null && HeaderElements.CONTINUE.equalsIgnoreCase(expect.getValue());
                 if (!expectContinue) {
+                    // 发送 entity
                     conn.sendRequestEntity(request);
                 }
             }
+
+            // 将buffer中的数据写到输出流中并flush
             conn.flush();
             ClassicHttpResponse response = null;
             while (response == null) {
@@ -172,6 +176,7 @@ public class HttpRequestExecutor {
                     conn.flush();
                     expectContinue = false;
                 } else {
+                    // 接收 response header
                     response = conn.receiveResponseHeader();
                     if (streamListener != null) {
                         streamListener.onResponseHead(conn, response);
@@ -189,6 +194,7 @@ public class HttpRequestExecutor {
                 }
             }
             if (MessageSupport.canResponseHaveBody(request.getMethod(), response)) {
+                // 接收response entity
                 conn.receiveResponseEntity(response);
             }
             return response;
